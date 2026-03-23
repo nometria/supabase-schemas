@@ -1,0 +1,14 @@
+# Output of: supabase-schemas list --url postgresql://postgres:password@db.xxx.supabase.co:5432/postgres
+
+  app_acme_corp
+  app_beta_users
+  app_contoso
+  app_demo_tenant
+  app_fabrikam_inc
+  app_northwind
+  app_startup_xyz
+  app_test_org
+
+# 8 tenant schemas found
+# Each schema is isolated with its own tables and auth.users view
+# Schema naming: app_{sanitized_tenant_id}

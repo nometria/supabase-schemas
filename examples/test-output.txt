@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.9, pytest-9.0.2, pluggy-1.5.0 -- /Users/architsharma/miniconda3/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /private/tmp/ownmy-releases/supabase-schemas
+configfile: pyproject.toml
+plugins: anyio-4.12.1, cov-7.1.0
+collecting ... collected 4 items
+
+tests/test_schema_manager.py::test_schema_name_format PASSED             [ 25%]
+tests/test_schema_manager.py::test_schema_name_sanitizes_special_chars PASSED [ 50%]
+tests/test_schema_manager.py::test_import_succeeds_without_psycopg2 PASSED [ 75%]
+tests/test_schema_manager.py::test_tenant_id_validation PASSED           [100%]
+
+============================== 4 passed in 0.02s ===============================

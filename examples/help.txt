@@ -1,0 +1,18 @@
+usage: supabase-schemas [-h] [--migrations-dir MIGRATIONS_DIR] [--force]
+                        [--details] [--url URL]
+                        [{create,drop,list,migrate}] [tenant_id]
+
+Per-tenant PostgreSQL schema manager for Supabase
+
+positional arguments:
+  {create,drop,list,migrate}
+                        Command to run
+  tenant_id             Tenant ID
+
+options:
+  -h, --help            show this help message and exit
+  --migrations-dir MIGRATIONS_DIR
+                        Path to migrations directory
+  --force               Force drop without confirmation
+  --details             Show extra details in list
+  --url URL             Database URL (or DATABASE_URL env var)

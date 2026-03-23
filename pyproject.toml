@@ -21,8 +21,12 @@ dev = ["pytest>=8.0", "pytest-cov"]
 [project.scripts]
 supabase-schemas = "supabase_schemas.cli:main"
 
-[tool.hatch.build.targets.wheel.sources]
-"src" = "supabase_schemas"
+[tool.hatch.build.targets.wheel]
+packages = ["supabase_schemas"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
+
+[project.urls]
+Repository = "https://github.com/ownmy-app/supabase-schemas"

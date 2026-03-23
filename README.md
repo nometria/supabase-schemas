@@ -8,6 +8,35 @@ an `auth.users` view — without paying for multiple Supabase projects.
 
 ---
 
+## Quick start
+
+```bash
+# Clone and install
+git clone https://github.com/ownmy-app/supabase-schemas
+cd supabase-schemas
+pip install -e .
+
+# Set your database URL
+export DATABASE_URL=postgresql://postgres.your-ref:password@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+
+# Create a tenant schema
+supabase-schemas create acme-corp
+
+# List all tenant schemas
+supabase-schemas list
+
+# Run migrations for a tenant
+supabase-schemas migrate acme-corp --migrations-dir ./migrations
+
+# Drop a tenant schema
+supabase-schemas drop acme-corp --force
+
+# Run tests
+pytest tests/ -v
+```
+
+---
+
 ## Why
 
 Supabase multi-tenancy via schema-per-tenant is the most cost-effective
@@ -22,10 +51,9 @@ This fills that gap.
 pip install supabase-schemas    # PyPI (coming soon)
 
 # or from source:
-git clone https://github.com/YOUR_ORG/supabase-schemas
+git clone https://github.com/ownmy-app/supabase-schemas
 cd supabase-schemas
-pip install -r requirements.txt
-cp .env.example .env
+pip install -e .
 ```
 
 ---
@@ -57,21 +85,21 @@ end $$;
 
 ```bash
 # Create a new tenant schema
-python src/schema_manager.py create my-tenant
+supabase-schemas create my-tenant
 
 # Create and run migrations immediately
-python src/schema_manager.py create my-tenant --migrations-dir ./migrations
+supabase-schemas create my-tenant --migrations-dir ./migrations
 
 # List all tenant schemas
-python src/schema_manager.py list
-python src/schema_manager.py list --details   # also shows tables
+supabase-schemas list
+supabase-schemas list --details   # also shows tables
 
 # Run migrations for an existing schema
-python src/schema_manager.py migrate my-tenant --migrations-dir ./migrations
+supabase-schemas migrate my-tenant --migrations-dir ./migrations
 
 # Drop a schema (DESTRUCTIVE — asks for confirmation)
-python src/schema_manager.py drop my-tenant
-python src/schema_manager.py drop my-tenant --force   # skip confirmation
+supabase-schemas drop my-tenant
+supabase-schemas drop my-tenant --force   # skip confirmation
 ```
 
 ---
@@ -99,3 +127,28 @@ Each schema gets: `app_<sanitized-id>` (lowercase, underscores, `app_` prefix).
 - Low standalone (open source is the right play)
 - High as a content marketing asset — "Supabase multi-tenant" is a top-10 searched pattern
 - Drives inbound to core platform: "now that you have your schemas sorted, let's self-host the whole thing"
+
+---
+
+## Example output
+
+Running `pytest tests/ -v`:
+
+```
+============================= test session starts ==============================
+platform darwin -- Python 3.13.9, pytest-9.0.2, pluggy-1.5.0
+cachedir: .pytest_cache
+rootdir: /tmp/ownmy-releases/supabase-schemas
+configfile: pyproject.toml
+plugins: anyio-4.12.1, cov-7.1.0
+collecting ... collected 4 items
+
+tests/test_schema_manager.py::test_schema_name_format PASSED             [ 25%]
+tests/test_schema_manager.py::test_schema_name_sanitizes_special_chars PASSED [ 50%]
+tests/test_schema_manager.py::test_import_succeeds_without_psycopg2 PASSED [ 75%]
+tests/test_schema_manager.py::test_tenant_id_validation PASSED           [100%]
+
+============================== 4 passed in 0.02s ===============================
+```
+
+See `examples/sample-schema-list.txt` for what `supabase-schemas list` output looks like.
