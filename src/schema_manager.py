@@ -14,10 +14,9 @@ Usage:
 """
 
 import os
-import sys
 import argparse
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 import re
 
 # Try to import psycopg2, but don't fail if not available
