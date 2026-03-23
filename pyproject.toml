@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "supabase-schemas"
-version = "0.1.0"
+version = "0.1.1"
 description = "Per-tenant PostgreSQL schema manager for Supabase. Manages isolated schemas within a single Supabase instance."
 readme = "README.md"
 license = { text = "MIT" }

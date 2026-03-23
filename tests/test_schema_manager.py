@@ -39,7 +39,7 @@ def test_import_succeeds_without_psycopg2(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", mock_import)
 
     # Re-importing should not raise
-    import schema_manager as sm
+    import supabase_schemas.schema_manager as sm
     assert sm.PSYCOPG2_AVAILABLE is False
 
 
