@@ -1,6 +1,5 @@
 """CLI entry point for supabase-schemas."""
 import sys
-import os
 import argparse
 
 from .schema_manager import (
@@ -8,7 +7,6 @@ from .schema_manager import (
     drop_app_schema,
     list_app_schemas,
     run_migrations,
-    schema_exists,
 )
 
 
