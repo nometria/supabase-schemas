@@ -12,7 +12,7 @@ an `auth.users` view — without paying for multiple Supabase projects.
 
 ```bash
 # Clone and install
-git clone https://github.com/ownmy-app/supabase-schemas
+git clone https://github.com/nometria/supabase-schemas
 cd supabase-schemas
 pip install -e .
 
@@ -51,7 +51,7 @@ This fills that gap.
 pip install supabase-schemas    # PyPI (coming soon)
 
 # or from source:
-git clone https://github.com/ownmy-app/supabase-schemas
+git clone https://github.com/nometria/supabase-schemas
 cd supabase-schemas
 pip install -e .
 ```

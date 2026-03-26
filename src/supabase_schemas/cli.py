@@ -1,7 +1,15 @@
 """CLI entry point for supabase-schemas."""
 import sys
+import os
 import argparse
-from .schema_manager import SchemaManager
+
+from .schema_manager import (
+    create_app_schema,
+    drop_app_schema,
+    list_app_schemas,
+    run_migrations,
+    schema_exists,
+)
 
 
 def main():
@@ -18,24 +26,15 @@ def main():
     parser.add_argument("--migrations-dir", default="./migrations", help="Path to migrations directory")
     parser.add_argument("--force", action="store_true", help="Force drop without confirmation")
     parser.add_argument("--details", action="store_true", help="Show extra details in list")
-    parser.add_argument("--url", help="Database URL (or DATABASE_URL env var)")
 
     args = parser.parse_args()
-
-    import os
-    db_url = args.url or os.environ.get("DATABASE_URL")
-    if not db_url:
-        print("Error: --url or DATABASE_URL env var required", file=sys.stderr)
-        sys.exit(1)
-
-    mgr = SchemaManager(db_url)
 
     if args.command == "create":
         if not args.tenant_id:
             print("Error: tenant_id required for create", file=sys.stderr)
             sys.exit(1)
-        mgr.create_schema(args.tenant_id, migrations_dir=args.migrations_dir)
-        print(f"Created schema for tenant: {args.tenant_id}")
+        schema_name = create_app_schema(args.tenant_id)
+        print(f"Created schema for tenant: {args.tenant_id} (schema: {schema_name})")
 
     elif args.command == "drop":
         if not args.tenant_id:
@@ -46,22 +45,26 @@ def main():
             if confirm.lower() != "y":
                 print("Aborted.")
                 sys.exit(0)
-        mgr.drop_schema(args.tenant_id)
+        drop_app_schema(args.tenant_id)
         print(f"Dropped schema for tenant: {args.tenant_id}")
 
     elif args.command == "list":
-        schemas = mgr.list_schemas(details=args.details)
+        schemas = list_app_schemas()
         if not schemas:
             print("No tenant schemas found.")
-        for s in schemas:
-            print(f"  {s}")
+        else:
+            for s in schemas:
+                print(f"  {s}")
 
     elif args.command == "migrate":
         if not args.tenant_id:
             print("Error: tenant_id required for migrate", file=sys.stderr)
             sys.exit(1)
-        mgr.migrate(args.tenant_id, migrations_dir=args.migrations_dir)
-        print(f"Migrations applied for tenant: {args.tenant_id}")
+        applied = run_migrations(args.tenant_id, args.migrations_dir)
+        if applied:
+            print(f"Applied {len(applied)} migration(s) for tenant: {args.tenant_id}")
+        else:
+            print("No new migrations to apply.")
 
 
 if __name__ == "__main__":
