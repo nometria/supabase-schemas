@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+import json
 import argparse
 from pathlib import Path
 from typing import List, Dict, Any
@@ -384,6 +385,210 @@ def schema_exists(app_id: str, conn=None) -> bool:
             conn.close()
 
 
+def clone_schema(source_id: str, target_id: str, conn=None) -> str:
+    """
+    Clone schema structure from one tenant to another.
+    Copies tables, indexes, and constraints using CREATE TABLE ... (LIKE ... INCLUDING ALL).
+    Does NOT copy data — only structure.
+
+    Args:
+        source_id: The source tenant ID to clone from
+        target_id: The target tenant ID to clone into
+        conn: Optional existing database connection
+
+    Returns:
+        The target schema name created
+    """
+    if not PSYCOPG2_AVAILABLE:
+        raise RuntimeError("psycopg2 not installed. Run: pip install psycopg2-binary")
+
+    should_close = conn is None
+    if conn is None:
+        conn = get_connection()
+
+    source_schema = sanitize_schema_name(source_id)
+    target_schema = sanitize_schema_name(target_id)
+
+    try:
+        with conn.cursor() as cur:
+            # Verify source schema exists
+            cur.execute("""
+                SELECT EXISTS(
+                    SELECT 1 FROM information_schema.schemata
+                    WHERE schema_name = %s
+                )
+            """, (source_schema,))
+            if not cur.fetchone()[0]:
+                raise ValueError(f"Source schema '{source_schema}' does not exist")
+
+            # Create the target schema (with privileges via ensure_schema_exposed)
+            cur.execute("SELECT public.ensure_schema_exposed(%s)", (target_schema,))
+
+            # Create migrations tracking table in the target schema
+            cur.execute(sql.SQL("""
+                CREATE TABLE IF NOT EXISTS {}._migrations (
+                    id SERIAL PRIMARY KEY,
+                    migration_name TEXT NOT NULL UNIQUE,
+                    applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            """).format(sql.Identifier(target_schema)))
+
+            # Get all base tables from the source schema (excluding _migrations and views)
+            cur.execute("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = %s
+                  AND table_type = 'BASE TABLE'
+                  AND table_name != '_migrations'
+                ORDER BY table_name
+            """, (source_schema,))
+            tables = [row[0] for row in cur.fetchall()]
+
+            for table_name in tables:
+                cur.execute(sql.SQL(
+                    "CREATE TABLE {}.{} (LIKE {}.{} INCLUDING ALL)"
+                ).format(
+                    sql.Identifier(target_schema),
+                    sql.Identifier(table_name),
+                    sql.Identifier(source_schema),
+                    sql.Identifier(table_name),
+                ))
+                print(f"  Cloned table: {table_name}")
+
+            # Recreate the auth.users view in the target schema
+            cur.execute("""
+                DO $$
+                BEGIN
+                    EXECUTE 'CREATE OR REPLACE VIEW ' || quote_ident(%s) || '.users AS
+                        SELECT id, email, created_at, updated_at,
+                               raw_user_meta_data->>''full_name'' as full_name,
+                               raw_user_meta_data->>''role'' as role
+                        FROM auth.users';
+                    BEGIN
+                        EXECUTE 'GRANT SELECT ON ' || quote_ident(%s) || '.users TO anon, authenticated, service_role';
+                    EXCEPTION WHEN undefined_object THEN NULL;
+                    END;
+                EXCEPTION
+                    WHEN undefined_table THEN
+                        RAISE NOTICE 'auth.users table not found, skipping users view';
+                    WHEN insufficient_privilege THEN
+                        RAISE NOTICE 'Insufficient privileges to create users view';
+                END $$;
+            """, (target_schema, target_schema))
+
+            conn.commit()
+            print(f"Cloned schema '{source_schema}' -> '{target_schema}' ({len(tables)} tables, structure only)")
+            return target_schema
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error cloning schema: {e}")
+        raise
+    finally:
+        if should_close:
+            conn.close()
+
+
+def export_schema(app_id: str, output_path: str = None, conn=None) -> Dict[str, list]:
+    """
+    Export all table data from a tenant's schema to JSON.
+
+    Args:
+        app_id: The application/tenant ID
+        output_path: Optional file path to write JSON to. If None, returns data only.
+        conn: Optional existing database connection
+
+    Returns:
+        Dictionary mapping table names to lists of row dicts: {"table_name": [rows], ...}
+    """
+    if not PSYCOPG2_AVAILABLE:
+        raise RuntimeError("psycopg2 not installed. Run: pip install psycopg2-binary")
+
+    should_close = conn is None
+    if conn is None:
+        conn = get_connection()
+
+    schema_name = sanitize_schema_name(app_id)
+
+    try:
+        with conn.cursor() as cur:
+            # Verify schema exists
+            cur.execute("""
+                SELECT EXISTS(
+                    SELECT 1 FROM information_schema.schemata
+                    WHERE schema_name = %s
+                )
+            """, (schema_name,))
+            if not cur.fetchone()[0]:
+                raise ValueError(f"Schema '{schema_name}' does not exist")
+
+            # Get all base tables (excluding internal _migrations table)
+            cur.execute("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = %s
+                  AND table_type = 'BASE TABLE'
+                  AND table_name != '_migrations'
+                ORDER BY table_name
+            """, (schema_name,))
+            tables = [row[0] for row in cur.fetchall()]
+
+            result = {}
+            for table_name in tables:
+                # Get column names
+                cur.execute("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s
+                    ORDER BY ordinal_position
+                """, (schema_name, table_name))
+                columns = [row[0] for row in cur.fetchall()]
+
+                # Fetch all rows
+                cur.execute(sql.SQL("SELECT * FROM {}.{}").format(
+                    sql.Identifier(schema_name),
+                    sql.Identifier(table_name),
+                ))
+                rows = cur.fetchall()
+
+                # Convert to list of dicts, serializing non-JSON-native types
+                table_rows = []
+                for row in rows:
+                    row_dict = {}
+                    for col, val in zip(columns, row):
+                        # Convert non-serializable types to strings
+                        if isinstance(val, (bytes, bytearray)):
+                            row_dict[col] = val.hex()
+                        else:
+                            try:
+                                json.dumps(val)
+                                row_dict[col] = val
+                            except (TypeError, ValueError):
+                                row_dict[col] = str(val)
+                    table_rows.append(row_dict)
+
+                result[table_name] = table_rows
+                print(f"  Exported {table_name}: {len(table_rows)} rows")
+
+            # Write to file or stdout
+            json_output = json.dumps(result, indent=2, default=str)
+            if output_path:
+                Path(output_path).write_text(json_output)
+                print(f"Exported schema '{schema_name}' to {output_path}")
+            else:
+                print(json_output)
+
+            print(f"Export complete: {len(tables)} tables")
+            return result
+
+    except Exception as e:
+        print(f"Error exporting schema: {e}")
+        raise
+    finally:
+        if should_close:
+            conn.close()
+
+
 def get_app_schema_name(app_id: str) -> str:
     """Get the schema name for an app ID."""
     return sanitize_schema_name(app_id)
@@ -392,14 +597,16 @@ def get_app_schema_name(app_id: str) -> str:
 # Export functions for use in generate_schema.py
 __all__ = [
     'create_app_schema',
-    'drop_app_schema', 
+    'drop_app_schema',
     'list_app_schemas',
     'run_migrations',
     'get_schema_tables',
     'schema_exists',
     'get_app_schema_name',
     'sanitize_schema_name',
-    'get_connection'
+    'clone_schema',
+    'export_schema',
+    'get_connection',
 ]
 
 
@@ -431,7 +638,17 @@ def main():
     migrate_parser.add_argument('app_id', help='Application ID')
     migrate_parser.add_argument('--migrations-dir', '-m', required=True,
                                help='Path to migrations directory')
-    
+
+    # Clone command
+    clone_parser = subparsers.add_parser('clone', help='Clone schema structure from one tenant to another')
+    clone_parser.add_argument('source_id', help='Source tenant ID to clone from')
+    clone_parser.add_argument('target_id', help='Target tenant ID to clone into')
+
+    # Export command
+    export_parser = subparsers.add_parser('export', help='Export tenant schema data to JSON')
+    export_parser.add_argument('app_id', help='Application ID')
+    export_parser.add_argument('--output', '-o', help='Output file path (default: stdout)')
+
     args = parser.parse_args()
     
     if args.command == 'create':
@@ -470,14 +687,21 @@ def main():
         if not schema_exists(args.app_id):
             print(f"Schema for '{args.app_id}' does not exist. Creating...")
             create_app_schema(args.app_id)
-        
+
         print(f"Running migrations from {args.migrations_dir}...")
         applied = run_migrations(args.app_id, args.migrations_dir)
         if applied:
-            print(f"✅ Applied {len(applied)} migrations: {', '.join(applied)}")
+            print(f"Applied {len(applied)} migrations: {', '.join(applied)}")
         else:
-            print("ℹ️ No new migrations to apply")
-            
+            print("No new migrations to apply")
+
+    elif args.command == 'clone':
+        target_schema = clone_schema(args.source_id, args.target_id)
+        print(f"Target schema: {target_schema}")
+
+    elif args.command == 'export':
+        export_schema(args.app_id, output_path=args.output)
+
     else:
         parser.print_help()
 

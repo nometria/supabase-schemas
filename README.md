@@ -28,6 +28,12 @@ supabase-schemas list
 # Run migrations for a tenant
 supabase-schemas migrate acme-corp --migrations-dir ./migrations
 
+# Clone schema structure to a new tenant (no data)
+supabase-schemas clone acme-corp acme-staging
+
+# Export a tenant's data to JSON
+supabase-schemas export acme-corp --output acme.json
+
 # Drop a tenant schema
 supabase-schemas drop acme-corp --force
 
@@ -48,7 +54,7 @@ This fills that gap.
 ## Install
 
 ```bash
-pip install supabase-schemas    # PyPI (coming soon)
+pip install supabase-schemas
 
 # or from source:
 git clone https://github.com/nometria/supabase-schemas
@@ -97,6 +103,13 @@ supabase-schemas list --details   # also shows tables
 # Run migrations for an existing schema
 supabase-schemas migrate my-tenant --migrations-dir ./migrations
 
+# Clone schema structure from one tenant to another (no data)
+supabase-schemas clone acme-prod acme-staging
+
+# Export a tenant's data to JSON
+supabase-schemas export my-tenant                    # prints to stdout
+supabase-schemas export my-tenant --output dump.json # writes to file
+
 # Drop a schema (DESTRUCTIVE — asks for confirmation)
 supabase-schemas drop my-tenant
 supabase-schemas drop my-tenant --force   # skip confirmation
@@ -110,6 +123,8 @@ supabase-schemas drop my-tenant --force   # skip confirmation
 2. `migrate` → reads `.sql` files sorted alphabetically, skips already-applied, records each in `_migrations`
 3. `list` → queries `information_schema.schemata` for all `app_*` schemas
 4. `drop` → `DROP SCHEMA CASCADE` (with confirmation prompt)
+5. `clone` → creates target schema, then copies every table from the source using `CREATE TABLE ... (LIKE source INCLUDING ALL)` — indexes, constraints, and defaults are preserved, but no rows are copied
+6. `export` → reads every table in the schema and serializes all rows to JSON (`{"table_name": [rows], ...}`), writing to stdout or a file
 
 Each schema gets: `app_<sanitized-id>` (lowercase, underscores, `app_` prefix).
 
@@ -118,8 +133,6 @@ Each schema gets: `app_<sanitized-id>` (lowercase, underscores, `app_` prefix).
 ## Immediate next steps
 1. Publish to PyPI as `supabase-schemas`
 2. Write blog post: "How to run 80+ isolated Postgres schemas in one Supabase project" — drives SEO + inbound
-3. Add `clone` command: copy schema structure (not data) from one tenant to another
-4. Add `export` command: dump a tenant's data to JSON
 
 ---
 

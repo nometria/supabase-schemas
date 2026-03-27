@@ -7,6 +7,8 @@ from .schema_manager import (
     schema_exists,
     get_app_schema_name,
     sanitize_schema_name,
+    clone_schema,
+    export_schema,
     PSYCOPG2_AVAILABLE,
 )
 
@@ -19,5 +21,7 @@ __all__ = [
     "schema_exists",
     "get_app_schema_name",
     "sanitize_schema_name",
+    "clone_schema",
+    "export_schema",
     "PSYCOPG2_AVAILABLE",
 ]
