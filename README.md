@@ -1,8 +1,16 @@
 # supabase-schemas
 
-<p align="center">
-  <b>Built by <a href="https://nometria.com">Nometria</a></b> — We take AI-built apps to production.
-</p>
+<div align="center">
+
+**[Nometria](https://nometria.com)** takes AI-built apps to production on AWS — secure, scalable, ready for real users.
+
+<sub><i>Multi-tenant apps need isolated schemas. We built this after helping a customer run 80+ tenant schemas in a single Supabase project.</i></sub>
+
+[![Deploy with Nometria](https://img.shields.io/badge/Deploy%20with-Nometria-111827?style=for-the-badge)](https://nometria.com)
+
+</div>
+
+---
 
 > Per-tenant PostgreSQL schema manager for Supabase.
 
@@ -207,28 +215,6 @@ Non-JSON-serializable values (bytes, datetime, UUID, Decimal) are automatically 
 
 ---
 
----
-
-## Built by Nometria
-
-<a href="https://nometria.com">
-  <img src="https://img.shields.io/badge/nometria.com-Take%20AI%20apps%20to%20production-111827?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkw0IDdWMTdMMTIgMjJMMjAgMTdWN0wxMiAyWiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+" alt="Nometria" />
-</a>
-
-**supabase-schemas** is open source and free to use. It's one of the developer tools we built while helping teams ship AI-generated apps to production.
-
-Multi-tenant apps need isolated schemas. We built this after helping a customer run 80+ tenant schemas in a single Supabase project.
-
-**What Nometria does:**
-- :rocket: **Deploy AI apps to AWS** -- one click, production-ready
-- :lock: **Security & compliance** -- SOC 2, HIPAA-ready infrastructure
-- :chart_with_upwards_trend: **Scale reliably** -- handles real user traffic from day one
-- :wrench: **Full source code ownership** -- you own everything, no lock-in
-
-If you're building with AI tools (Base44, Lovable, Bolt, Replit, Cursor) and need to go to production -- **[nometria.com](https://nometria.com)**
-
----
-
 ## Example output
 
 Running `pytest tests/ -v`:
@@ -251,3 +237,7 @@ tests/test_schema_manager.py::test_tenant_id_validation PASSED           [100%]
 ```
 
 See `examples/sample-schema-list.txt` for what `supabase-schemas list` output looks like.
+
+---
+
+<p align="center">Made with ❤️ by <a href="https://nometria.com">Nometria</a> — deploy AI apps to production in one click</p>
