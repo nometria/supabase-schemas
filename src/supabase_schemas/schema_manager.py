@@ -14,8 +14,10 @@ Usage:
 """
 
 import os
+import sys
 import json
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any
 import re
@@ -387,8 +389,10 @@ def schema_exists(app_id: str, conn=None) -> bool:
 
 def clone_schema(source_id: str, target_id: str, conn=None) -> str:
     """
-    Clone schema structure from one tenant to another.
-    Copies tables, indexes, and constraints using CREATE TABLE ... (LIKE ... INCLUDING ALL).
+    Clone schema structure (tables, views, functions) from one tenant to another.
+    Copies tables with indexes/constraints via CREATE TABLE ... (LIKE ... INCLUDING ALL),
+    recreates views by rewriting their definitions to reference the target schema,
+    and clones functions by replacing the source schema name in their bodies.
     Does NOT copy data — only structure.
 
     Args:
@@ -433,7 +437,7 @@ def clone_schema(source_id: str, target_id: str, conn=None) -> str:
                 )
             """).format(sql.Identifier(target_schema)))
 
-            # Get all base tables from the source schema (excluding _migrations and views)
+            # --- 1. Clone tables ---
             cur.execute("""
                 SELECT table_name
                 FROM information_schema.tables
@@ -455,7 +459,69 @@ def clone_schema(source_id: str, target_id: str, conn=None) -> str:
                 ))
                 print(f"  Cloned table: {table_name}")
 
-            # Recreate the auth.users view in the target schema
+            # --- 2. Clone views ---
+            # Get non-system views from the source schema (exclude the auth.users view
+            # which is recreated separately below)
+            cur.execute("""
+                SELECT table_name, view_definition
+                FROM information_schema.views
+                WHERE table_schema = %s
+                  AND table_name != 'users'
+                ORDER BY table_name
+            """, (source_schema,))
+            views = cur.fetchall()
+
+            for view_name, view_def in views:
+                # Rewrite the view definition: replace source schema references
+                # with the target schema so the view points at the cloned tables
+                target_def = view_def.replace(
+                    f'"{source_schema}".', f'"{target_schema}".'
+                ).replace(
+                    f'{source_schema}.', f'{target_schema}.'
+                )
+                cur.execute(sql.SQL(
+                    "CREATE OR REPLACE VIEW {}.{} AS "
+                ).format(
+                    sql.Identifier(target_schema),
+                    sql.Identifier(view_name),
+                ) + sql.SQL(target_def))
+                print(f"  Cloned view: {view_name}")
+
+            # --- 3. Clone functions ---
+            # Query pg_proc joined with pg_namespace to get user-defined functions
+            # in the source schema, then recreate them in the target schema
+            cur.execute("""
+                SELECT p.proname,
+                       pg_get_functiondef(p.oid) AS func_def
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = %s
+                ORDER BY p.proname
+            """, (source_schema,))
+            functions = cur.fetchall()
+
+            for func_name, func_def in functions:
+                # Replace source schema references with target schema
+                target_func_def = func_def.replace(
+                    f'"{source_schema}".', f'"{target_schema}".'
+                ).replace(
+                    f'{source_schema}.', f'{target_schema}.'
+                )
+                # Replace the schema qualifier in CREATE FUNCTION itself
+                # pg_get_functiondef returns: CREATE OR REPLACE FUNCTION source_schema.func_name(...)
+                target_func_def = target_func_def.replace(
+                    f'FUNCTION {source_schema}.', f'FUNCTION {target_schema}.'
+                )
+                try:
+                    cur.execute(target_func_def)
+                    print(f"  Cloned function: {func_name}")
+                except Exception as fn_err:
+                    print(f"  Warning: could not clone function {func_name}: {fn_err}")
+                    conn.rollback()
+                    # Re-enter the transaction for remaining operations
+                    cur.execute("SELECT 1")
+
+            # --- 4. Recreate auth.users view ---
             cur.execute("""
                 DO $$
                 BEGIN
@@ -477,7 +543,8 @@ def clone_schema(source_id: str, target_id: str, conn=None) -> str:
             """, (target_schema, target_schema))
 
             conn.commit()
-            print(f"Cloned schema '{source_schema}' -> '{target_schema}' ({len(tables)} tables, structure only)")
+            print(f"Cloned schema '{source_schema}' -> '{target_schema}' "
+                  f"({len(tables)} tables, {len(views)} views, {len(functions)} functions, structure only)")
             return target_schema
 
     except Exception as e:
@@ -489,17 +556,29 @@ def clone_schema(source_id: str, target_id: str, conn=None) -> str:
             conn.close()
 
 
-def export_schema(app_id: str, output_path: str = None, conn=None) -> Dict[str, list]:
+def export_schema(app_id: str, output_path: str = None, conn=None) -> Dict[str, Any]:
     """
-    Export all table data from a tenant's schema to JSON.
+    Export all table data from a tenant's schema to JSON with a manifest.
+
+    The output format is:
+    {
+        "_manifest": {
+            "schema": "app_acme",
+            "exported_at": "2025-...",
+            "tables": {"orders": 42, "users": 10, ...},
+            "total_rows": 52
+        },
+        "orders": [{"id": 1, ...}, ...],
+        "users": [{"id": 1, ...}, ...]
+    }
 
     Args:
         app_id: The application/tenant ID
-        output_path: Optional file path to write JSON to. If None, returns data only.
+        output_path: Optional file path to write JSON to. If None, prints to stdout.
         conn: Optional existing database connection
 
     Returns:
-        Dictionary mapping table names to lists of row dicts: {"table_name": [rows], ...}
+        Dictionary with _manifest key and table data
     """
     if not PSYCOPG2_AVAILABLE:
         raise RuntimeError("psycopg2 not installed. Run: pip install psycopg2-binary")
@@ -533,7 +612,10 @@ def export_schema(app_id: str, output_path: str = None, conn=None) -> Dict[str, 
             """, (schema_name,))
             tables = [row[0] for row in cur.fetchall()]
 
-            result = {}
+            result: Dict[str, Any] = {}
+            manifest_tables: Dict[str, int] = {}
+            total_rows = 0
+
             for table_name in tables:
                 # Get column names
                 cur.execute("""
@@ -568,17 +650,27 @@ def export_schema(app_id: str, output_path: str = None, conn=None) -> Dict[str, 
                     table_rows.append(row_dict)
 
                 result[table_name] = table_rows
-                print(f"  Exported {table_name}: {len(table_rows)} rows")
+                manifest_tables[table_name] = len(table_rows)
+                total_rows += len(table_rows)
+                print(f"  Exported {table_name}: {len(table_rows)} rows", file=sys.stderr)
+
+            # Build manifest
+            result["_manifest"] = {
+                "schema": schema_name,
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "tables": manifest_tables,
+                "total_rows": total_rows,
+            }
 
             # Write to file or stdout
             json_output = json.dumps(result, indent=2, default=str)
             if output_path:
                 Path(output_path).write_text(json_output)
-                print(f"Exported schema '{schema_name}' to {output_path}")
+                print(f"Exported schema '{schema_name}' to {output_path} "
+                      f"({len(tables)} tables, {total_rows} rows)")
             else:
                 print(json_output)
 
-            print(f"Export complete: {len(tables)} tables")
             return result
 
     except Exception as e:

@@ -123,10 +123,70 @@ supabase-schemas drop my-tenant --force   # skip confirmation
 2. `migrate` → reads `.sql` files sorted alphabetically, skips already-applied, records each in `_migrations`
 3. `list` → queries `information_schema.schemata` for all `app_*` schemas
 4. `drop` → `DROP SCHEMA CASCADE` (with confirmation prompt)
-5. `clone` → creates target schema, then copies every table from the source using `CREATE TABLE ... (LIKE source INCLUDING ALL)` — indexes, constraints, and defaults are preserved, but no rows are copied
-6. `export` → reads every table in the schema and serializes all rows to JSON (`{"table_name": [rows], ...}`), writing to stdout or a file
+5. `clone` → creates target schema, then copies tables (`CREATE TABLE ... (LIKE source INCLUDING ALL)`), views (rewrites definitions to reference target), and functions (replaces schema qualifiers). No data is copied.
+6. `export` → reads every table in the schema and serializes all rows to JSON with a `_manifest` header containing schema name, timestamp, per-table row counts, and total rows
 
 Each schema gets: `app_<sanitized-id>` (lowercase, underscores, `app_` prefix).
+
+---
+
+## Clone details
+
+`clone` copies the full schema structure without any row data:
+
+- **Tables** -- uses `CREATE TABLE ... (LIKE source INCLUDING ALL)` to preserve indexes, constraints, defaults, and sequences
+- **Views** -- reads `information_schema.views` and rewrites the definition to reference the target schema
+- **Functions** -- reads `pg_proc` / `pg_get_functiondef` and replaces the schema qualifier
+
+```bash
+# Clone production structure into a staging schema
+supabase-schemas clone acme-prod acme-staging
+
+# Output:
+#   Cloned table: orders
+#   Cloned table: products
+#   Cloned view: order_summary
+#   Cloned function: calculate_total
+#   Cloned schema 'app_acme_prod' -> 'app_acme_staging' (2 tables, 1 views, 1 functions, structure only)
+```
+
+---
+
+## Export details
+
+`export` dumps all table data to JSON with a manifest:
+
+```bash
+# Print to stdout
+supabase-schemas export acme-prod
+
+# Write to file
+supabase-schemas export acme-prod --output acme-backup.json
+```
+
+Output format:
+
+```json
+{
+  "_manifest": {
+    "schema": "app_acme_prod",
+    "exported_at": "2025-06-15T12:00:00+00:00",
+    "tables": {
+      "orders": 42,
+      "products": 15
+    },
+    "total_rows": 57
+  },
+  "orders": [
+    {"id": 1, "total": 99.50, "created_at": "2025-01-01"}
+  ],
+  "products": [
+    {"id": 1, "name": "Widget", "price": 9.99}
+  ]
+}
+```
+
+Non-JSON-serializable values (bytes, datetime, UUID, Decimal) are automatically converted to strings.
 
 ---
 
