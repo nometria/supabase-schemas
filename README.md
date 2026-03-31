@@ -1,16 +1,6 @@
 # supabase-schemas
 
-<div align="center">
-
-**[Nometria](https://nometria.com)** takes AI-built apps to production on AWS — secure, scalable, ready for real users.
-
-<sub><i>Multi-tenant apps need isolated schemas. We built this after helping a customer run 80+ tenant schemas in a single Supabase project.</i></sub>
-
-[![Deploy with Nometria](https://img.shields.io/badge/Deploy%20with-Nometria-111827?style=for-the-badge)](https://nometria.com)
-
-</div>
-
----
+Built by the [Nometria](https://nometria.com) team — we take AI-built apps to production.
 
 > Per-tenant PostgreSQL schema manager for Supabase.
 
@@ -238,6 +228,3 @@ tests/test_schema_manager.py::test_tenant_id_validation PASSED           [100%]
 
 See `examples/sample-schema-list.txt` for what `supabase-schemas list` output looks like.
 
----
-
-<p align="center">Made with ❤️ by <a href="https://nometria.com">Nometria</a> — deploy AI apps to production in one click</p>
